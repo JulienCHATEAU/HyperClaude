@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var nextReset: String?
     private var rc = RemoteControl.State()
     private var rcBusy = false
-    private weak var rcSwitch: NSSwitch?
+    private weak var rcSwitch: PillSwitch?
     private var eventStream: FSEventStreamRef?
     private var pollTimer: Timer?
     private var usageTimer: Timer?
@@ -109,7 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.rc = fetched
                 self.updateButton()
                 if self.menuOpen {
-                    self.rcSwitch?.state = fetched.serverRunning ? .on : .off
+                    self.rcSwitch?.isOn = fetched.serverRunning
                 } else {
                     self.rebuildMenu()
                 }
@@ -129,7 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.rcBusy = false
                 self.rc = fetched
                 self.rcSwitch?.isEnabled = true
-                self.rcSwitch?.state = fetched.serverRunning ? .on : .off
+                self.rcSwitch?.isOn = fetched.serverRunning
                 self.updateButton()
                 if let failure { self.alertRC(failure) }
             }
@@ -522,25 +522,21 @@ final class MenuActionView: NSView {
 
 /// En-tete : logo + compteurs a gauche, switch "/rc" a droite. Le switch agit sans fermer le menu.
 final class HeaderView: NSView {
-    let toggle = NSSwitch()
+    let toggle = PillSwitch()
     private let titleField: NSTextField
     private let rcLabel = NSTextField(labelWithString: "/rc")
-    private let onToggle: (Bool) -> Void
 
     init(title: NSAttributedString, rcOn: Bool, rcEnabled: Bool, onToggle: @escaping (Bool) -> Void) {
         titleField = NSTextField(labelWithAttributedString: title)
-        self.onToggle = onToggle
         let width = title.size().width + 110
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 26))
         autoresizingMask = [.width]
 
         rcLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
         rcLabel.textColor = .secondaryLabelColor
-        toggle.controlSize = .mini
-        toggle.state = rcOn ? .on : .off
+        toggle.isOn = rcOn
         toggle.isEnabled = rcEnabled
-        toggle.target = self
-        toggle.action = #selector(switched)
+        toggle.onChange = onToggle
         [titleField, rcLabel, toggle].forEach(addSubview)
     }
 
@@ -550,17 +546,12 @@ final class HeaderView: NSView {
         super.layout()
         titleField.sizeToFit()
         rcLabel.sizeToFit()
-        toggle.sizeToFit()
         let midY = bounds.midY
         titleField.setFrameOrigin(NSPoint(x: 18, y: midY - titleField.frame.height / 2))
         toggle.setFrameOrigin(NSPoint(x: bounds.width - 14 - toggle.frame.width,
                                       y: midY - toggle.frame.height / 2))
         rcLabel.setFrameOrigin(NSPoint(x: toggle.frame.minX - 6 - rcLabel.frame.width,
                                        y: midY - rcLabel.frame.height / 2))
-    }
-
-    @objc private func switched() {
-        onToggle(toggle.state == .on)
     }
 }
 
@@ -621,5 +612,36 @@ final class GaugeView: NSView {
         barColor.setFill()
         NSBezierPath(roundedRect: NSRect(x: track.minX, y: track.minY, width: max(6, track.width * ratio), height: 6),
                      xRadius: 3, yRadius: 3).fill()
+    }
+}
+
+// MARK: - Switch /rc
+
+/// Interrupteur dessine a la main : NSSwitch reste gris dans un menu (fenetre jamais active).
+final class PillSwitch: NSView {
+    var isOn = false { didSet { needsDisplay = true } }
+    var isEnabled = true { didSet { alphaValue = isEnabled ? 1 : 0.5 } }
+    var onChange: ((Bool) -> Void)?
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: 28, height: 16))
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) non supporte") }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let track = bounds.insetBy(dx: 0.5, dy: 0.5)
+        (isOn ? NSColor.systemGreen : NSColor.tertiaryLabelColor).setFill()
+        NSBezierPath(roundedRect: track, xRadius: track.height / 2, yRadius: track.height / 2).fill()
+        let d = track.height - 4
+        let knob = NSRect(x: isOn ? track.maxX - d - 2 : track.minX + 2, y: track.minY + 2, width: d, height: d)
+        NSColor.white.setFill()
+        NSBezierPath(ovalIn: knob).fill()
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard isEnabled else { return }
+        isOn.toggle()
+        onChange?(isOn)
     }
 }
