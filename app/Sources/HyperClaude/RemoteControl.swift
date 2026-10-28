@@ -58,7 +58,8 @@ enum RemoteControl {
 
     static func start() -> Failure? {
         if zsh("sudo -n /usr/bin/pmset -a disablesleep 1").status != 0 { return .sudo }
-        var cmd = "claude remote-control"
+        // Sans session pre-creee, l'arret archive les sessions : le prochain demarrage repart de zero.
+        var cmd = "claude remote-control --no-create-session-in-dir"
         if let name { cmd += " --name " + quote(name) }
         let script = "tmux has-session -t \(session) 2>/dev/null"
             + " || tmux new-session -d -s \(session) -c \(quote(directory)) \(quote(cmd))"
