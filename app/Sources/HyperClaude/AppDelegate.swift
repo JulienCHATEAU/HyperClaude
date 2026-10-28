@@ -351,7 +351,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ]))
 
         let label = labels[s.status] ?? labels["unknown"]!
-        var sub = "\(label) · \(shorten(s.cwd))"
+        var sub = "\(label) · \(s.remote ? "/rc" : shorten(s.cwd))"
         if let model = s.model { sub += " · \(model)" }
         if let ctx = s.contextPercent { sub += " · ctx \(Int(ctx.rounded()))%" }
         if let waitingFor = s.waitingFor { sub += " · \(waitingFor)" }

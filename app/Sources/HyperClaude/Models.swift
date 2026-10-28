@@ -13,6 +13,7 @@ struct Session: Decodable {
     let shellPid: Int?
     let focusable: Bool
     let stale: Bool
+    let remote: Bool
     let model: String?
     let contextPercent: Double?
     let guardFiveHour: Int?

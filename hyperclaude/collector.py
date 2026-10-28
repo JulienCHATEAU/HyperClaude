@@ -61,6 +61,7 @@ class SessionEntry:
     alive: bool = False               # process reellement vivant
     focusable: bool = False           # tty resolu -> fenetre Hyper ciblable
     stale: bool = False               # pas de MaJ depuis STALE_AFTER_MS
+    remote: bool = False              # session ouverte depuis claude.ai via /rc
     model: Optional[str] = None       # modele affiche par la status line
     context_percent: Optional[float] = None
     guard_five_hour: Optional[int] = None   # seuils du garde-fou d'usage, si actif
@@ -137,7 +138,8 @@ def _find_session_log(session_id: str) -> Optional[Path]:
 
 
 def _read_ai_title(path: Path) -> Optional[str]:
-    """Retourne le dernier titre genere par l'IA (`type: ai-title`) du journal.
+    """Retourne le dernier titre genere par l'IA (`type: ai-title`) du journal, a defaut le
+    dernier prompt (`type: last-prompt`) : une session lancee par /rc n'a pas de titre IA.
 
     Lit seulement la fin du fichier (jusqu'a `_TITLE_TAIL_BYTES`) et scanne les lignes
     de la fin vers le debut - pas de parsing integral d'un gros JSONL.
@@ -150,18 +152,19 @@ def _read_ai_title(path: Path) -> Optional[str]:
             data = fh.read(to_read)
     except OSError:
         return None
+    last_prompt = None
     for line in reversed(data.splitlines()):
-        if b'"ai-title"' not in line:
+        if b'"ai-title"' not in line and (last_prompt or b'"last-prompt"' not in line):
             continue
         try:
             entry = json.loads(line)
         except ValueError:
             continue
-        if entry.get("type") == "ai-title":
-            title = entry.get("aiTitle")
-            if title:
-                return title
-    return None
+        if entry.get("type") == "ai-title" and entry.get("aiTitle"):
+            return entry["aiTitle"]
+        if entry.get("type") == "last-prompt" and not last_prompt:
+            last_prompt = entry.get("lastPrompt")
+    return last_prompt
 
 
 def _parse_session_file(path: Path) -> Optional[SessionEntry]:
@@ -191,6 +194,7 @@ def _parse_session_file(path: Path) -> Optional[SessionEntry]:
         waiting_for=raw.get("waitingFor"),
         updated_at=raw.get("updatedAt"),
         version=raw.get("version"),
+        remote=raw.get("entrypoint") == "sdk-cli",
     )
 
 

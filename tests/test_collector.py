@@ -126,6 +126,15 @@ class AiTitleTests(unittest.TestCase):
         log.write_text('{"type":"user"}\n{"type":"assistant"}', encoding="utf-8")
         self.assertIsNone(collector._read_ai_title(log))
 
+    def test_falls_back_to_last_prompt(self):
+        log = self.tmp / "sess.jsonl"
+        lines = [
+            '{"type":"last-prompt","lastPrompt":"Premier","sessionId":"s"}',
+            '{"type":"last-prompt","lastPrompt":"Ping","sessionId":"s"}',
+        ]
+        log.write_text("\n".join(lines), encoding="utf-8")
+        self.assertEqual(collector._read_ai_title(log), "Ping")
+
 
 class TtyResolutionTests(unittest.TestCase):
     def test_resolve_tty_direct(self):
