@@ -19,11 +19,8 @@ enum RemoteControl {
         case start
     }
 
-    /// Dossier de lancement de `claude remote-control` (`defaults write com.julienchateau.hyperclaude rcDirectory <chemin>`).
-    static var directory: String {
-        get { UserDefaults.standard.string(forKey: "rcDirectory") ?? NSHomeDirectory() + "/Documents/Repositories" }
-        set { UserDefaults.standard.set(newValue, forKey: "rcDirectory") }
-    }
+    /// Meme dossier que CLAUDE_RC_DIR dans ~/.zshrc.
+    static let directory = NSHomeDirectory() + "/Documents/Repositories"
 
     /// Nom optionnel de la session, comme `rc on <nom>` (`defaults write ... rcName "Mac Background Agent"`).
     static var name: String? {

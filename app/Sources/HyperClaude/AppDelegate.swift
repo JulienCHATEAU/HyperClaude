@@ -50,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshUsage()
         refreshRC()
         // Filet de securite si FSEvents rate un evenement (sauf menu ouvert, pour ne pas le perturber).
-        // L'etat /RC n'a pas d'evenement : il se suit uniquement par ce poll.
+        // L'etat /rc n'a pas d'evenement : il se suit uniquement par ce poll.
         pollTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             self?.autoRefresh()
             self?.refreshRC()
@@ -141,29 +141,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         switch failure {
         case .sudo:
-            alert.messageText = "/RC : sudo refusé sans mot de passe"
+            alert.messageText = "/rc : sudo refusé sans mot de passe"
             alert.informativeText = "La règle /etc/sudoers.d/claude-rc-pmset est absente ou invalide. "
                 + "Elle doit autoriser /usr/bin/pmset -a disablesleep 0 et 1 en NOPASSWD."
         case .start:
-            alert.messageText = "/RC : lancement impossible"
+            alert.messageText = "/rc : lancement impossible"
             alert.informativeText = "La session tmux \(RemoteControl.session) n'a pas démarré dans "
                 + "\(Self.shorten(RemoteControl.directory)). Vérifier que tmux et claude sont dans le PATH de login."
         }
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
-    }
-
-    @objc private func chooseRCDirectory() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.directoryURL = URL(fileURLWithPath: RemoteControl.directory)
-        panel.prompt = "Choisir"
-        NSApp.activate(ignoringOtherApps: true)
-        if panel.runModal() == .OK, let url = panel.url {
-            RemoteControl.directory = url.path
-            rebuildMenu()
-        }
     }
 
     // MARK: - Icone / badge
@@ -178,7 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }()
 
     /// Icone de barre de menus. Etat neutre : glyphe template (adaptatif natif).
-    /// Sinon glyphe colore selon le theme : vert si /RC actif, point orange si /RC incoherent
+    /// Sinon glyphe colore selon le theme : vert si /rc actif, point orange si /rc incoherent
     /// (serveur sans anti-veille ou l'inverse), pastille rouge prioritaire si une session attend.
     static func statusImage(waiting: Int, rc: RemoteControl.State, dark: Bool) -> NSImage {
         let h: CGFloat = 18
@@ -290,13 +277,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let usage, usage.available {
             menu.addItem(usageItem("Session", usage.sessionPercent, usage.sessionSeverity))
             menu.addItem(usageItem("Semaine", usage.weeklyPercent, usage.weeklySeverity))
-            if let nextReset {
-                menu.addItem(note("Reset dans \(nextReset)"))
-            }
         } else {
             menu.addItem(disabled("Usage indisponible"))
         }
-        menu.addItem(note(guardSummary()))
+        let reset = (usage?.available == true ? nextReset : nil).map { "Reset dans \($0) · " } ?? ""
+        menu.addItem(note(reset + guardSummary()))
 
         menu.addItem(.separator())
         // Largeur de contenu du menu (mesuree sur les items deja ajoutes) pour que la vue
@@ -319,10 +304,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.refreshUsage()
         }
         menu.addItem(refresh)
-        let rcDir = NSMenuItem(title: "Dossier /RC : \(Self.shorten(RemoteControl.directory))…",
-                               action: #selector(chooseRCDirectory), keyEquivalent: "")
-        rcDir.target = self
-        menu.addItem(rcDir)
         let quit = NSMenuItem(title: "Quitter HyperClaude", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
@@ -537,13 +518,13 @@ final class MenuActionView: NSView {
     }
 }
 
-// MARK: - En-tete du menu avec le switch /RC
+// MARK: - En-tete du menu avec le switch /rc
 
-/// En-tete : logo + compteurs a gauche, switch "/RC" a droite. Le switch agit sans fermer le menu.
+/// En-tete : logo + compteurs a gauche, switch "/rc" a droite. Le switch agit sans fermer le menu.
 final class HeaderView: NSView {
     let toggle = NSSwitch()
     private let titleField: NSTextField
-    private let rcLabel = NSTextField(labelWithString: "/RC")
+    private let rcLabel = NSTextField(labelWithString: "/rc")
     private let onToggle: (Bool) -> Void
 
     init(title: NSAttributedString, rcOn: Bool, rcEnabled: Bool, onToggle: @escaping (Bool) -> Void) {
