@@ -296,6 +296,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             menu.addItem(disabled("Usage indisponible"))
         }
+        menu.addItem(note(guardSummary()))
 
         menu.addItem(.separator())
         // Largeur de contenu du menu (mesuree sur les items deja ajoutes) pour que la vue
@@ -373,6 +374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let model = s.model { sub += " · \(model)" }
         if let ctx = s.contextPercent { sub += " · ctx \(Int(ctx.rounded()))%" }
         if let waitingFor = s.waitingFor { sub += " · \(waitingFor)" }
+        if let five = s.guardFiveHour { sub += " · garde \(five)%/\(s.guardSevenDay.map(String.init) ?? "-")%" }
         if s.stale { sub += " · inactive" }
         out.append(NSAttributedString(string: "\n" + sub, attributes: [
             .foregroundColor: NSColor.secondaryLabelColor,
@@ -388,6 +390,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         item.view = GaugeView(label: label, percent: percent, severity: severity)
         return item
+    }
+
+    /// Etat du garde-fou d'usage (/usage-guard) sur les sessions vivantes, seuils 5 h / 7 j.
+    private func guardSummary() -> String {
+        let guarded = sessions.filter { $0.guardFiveHour != nil }
+        if guarded.isEmpty { return "Garde-fou : inactif" }
+        let thresholds = Set(guarded.map { "5 h ≥ \($0.guardFiveHour ?? 0) %, 7 j ≥ \($0.guardSevenDay.map(String.init) ?? "-") %" })
+        let detail = thresholds.count == 1 ? thresholds.first! : "seuils variables"
+        return "Garde-fou : \(detail) (\(guarded.count)/\(sessions.count) session(s))"
     }
 
     /// Petite ligne grise d'information, alignee sur le texte des jauges.
