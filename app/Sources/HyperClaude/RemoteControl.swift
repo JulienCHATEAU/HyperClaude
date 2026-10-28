@@ -27,12 +27,13 @@ enum RemoteControl {
         UserDefaults.standard.string(forKey: "rcName").flatMap { $0.isEmpty ? nil : $0 }
     }
 
-    /// Shell de login : recupere le PATH (brew, ~/.local/bin) que l'app n'herite pas.
+    /// Shell de login : recupere le PATH de brew (.zprofile) que l'app n'herite pas.
     @discardableResult
     private static func zsh(_ script: String) -> (status: Int32, output: String) {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        proc.arguments = ["-lc", script]
+        // ~/.local/bin (claude) n'est ajoute que par .zshrc, que `zsh -l` ne lit pas.
+        proc.arguments = ["-lc", "export PATH=\"$HOME/.local/bin:$PATH\"\n" + script]
         let out = Pipe()
         proc.standardOutput = out
         proc.standardError = Pipe()
@@ -61,7 +62,10 @@ enum RemoteControl {
         if let name { cmd += " --name " + quote(name) }
         let script = "tmux has-session -t \(session) 2>/dev/null"
             + " || tmux new-session -d -s \(session) -c \(quote(directory)) \(quote(cmd))"
-        return zsh(script).status == 0 ? nil : .start
+        // Une session tmux dont la commande echoue meurt aussitot : on verifie qu'elle tient.
+        if zsh(script + "\nsleep 2\ntmux has-session -t \(session) 2>/dev/null").status == 0 { return nil }
+        zsh("sudo -n /usr/bin/pmset -a disablesleep 0")
+        return .start
     }
 
     static func stop() -> Failure? {
