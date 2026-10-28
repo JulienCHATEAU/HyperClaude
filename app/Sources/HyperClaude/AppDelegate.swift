@@ -375,7 +375,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ]))
 
         let label = labels[s.status] ?? labels["unknown"]!
-        var sub = "\(label) · \(shorten(s.cwd)) · \(s.tty ?? "—")"
+        var sub = "\(label) · \(shorten(s.cwd))"
+        if let model = s.model { sub += " · \(model)" }
+        if let ctx = s.contextPercent { sub += " · ctx \(Int(ctx.rounded()))%" }
         if let waitingFor = s.waitingFor { sub += " · \(waitingFor)" }
         if s.stale { sub += " · inactive" }
         out.append(NSAttributedString(string: "\n" + sub, attributes: [

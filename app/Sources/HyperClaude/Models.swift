@@ -13,6 +13,10 @@ struct Session: Decodable {
     let shellPid: Int?
     let focusable: Bool
     let stale: Bool
+    let model: String?
+    let contextPercent: Double?
+    let guardFiveHour: Int?
+    let guardSevenDay: Int?
 }
 
 /// Instantane d'usage de quota (fourni par `hyperclaude.usage`).

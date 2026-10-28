@@ -115,7 +115,9 @@ et rend un menu natif.
   barre) ; pastille rouge dessinee avec compteur des qu'une session attend.
 - **Menu** : une entree par session sur deux niveaux - **titre genere par l'IA** (celui de
   `/resume`, lu dans le journal `ai-title`) en gras avec puce de statut coloree, puis
-  sous-ligne (statut, dossier, tty, attente). Clic = focus best-effort (active Hyper ; le
+  sous-ligne (statut, dossier, modele, contexte %, attente). Modele et contexte viennent de
+  la status line (`~/.claude/hooks/usage-statusline.py`, qui ecrit
+  `~/.claude/state/statusline/<sessionId>.json`), lue via `hyperclaude/claude_hooks.py`. Clic = focus best-effort (active Hyper ; le
   `tty` est deja porte pour le plugin Hyper de L3).
 - **Footer** : `Session` et `Semaine` avec mini-barre + pourcentage (via `usage.py`, couleur
   selon la severite), ou `Usage indisponible` a defaut - jamais de valeur inventee.

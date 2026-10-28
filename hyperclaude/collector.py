@@ -23,6 +23,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from . import claude_hooks
+
 # Emplacement des fichiers d'etat natifs de Claude Code.
 SESSIONS_DIR = Path.home() / ".claude" / "sessions"
 
@@ -59,6 +61,10 @@ class SessionEntry:
     alive: bool = False               # process reellement vivant
     focusable: bool = False           # tty resolu -> fenetre Hyper ciblable
     stale: bool = False               # pas de MaJ depuis STALE_AFTER_MS
+    model: Optional[str] = None       # modele affiche par la status line
+    context_percent: Optional[float] = None
+    guard_five_hour: Optional[int] = None   # seuils du garde-fou d'usage, si actif
+    guard_seven_day: Optional[int] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -227,6 +233,13 @@ def collect(include_dead: bool = False, now_ms: Optional[int] = None) -> List[Se
             log = _find_session_log(entry.session_id)
             if log:
                 entry.title = _read_ai_title(log)
+
+        info = claude_hooks.session_info(entry.session_id)
+        entry.model = info.get("model") or None
+        entry.context_percent = info.get("context_percent")
+        guard = claude_hooks.guard_thresholds(entry.session_id) or {}
+        entry.guard_five_hour = guard.get("five_hour")
+        entry.guard_seven_day = guard.get("seven_day")
 
         entries.append(entry)
 
