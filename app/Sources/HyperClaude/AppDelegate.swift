@@ -10,6 +10,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuOpen = false
     private var sessions: [Session] = []
     private var usage: Usage?
+    private var rc = RemoteControl.State()
+    private var rcBusy = false
+    private weak var rcSwitch: NSSwitch?
     private var eventStream: FSEventStreamRef?
     private var pollTimer: Timer?
     private var usageTimer: Timer?
@@ -51,9 +54,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startWatching()
         refreshSessions()
         refreshUsage()
+        refreshRC()
         // Filet de securite si FSEvents rate un evenement (sauf menu ouvert, pour ne pas le perturber).
+        // L'etat /RC n'a pas d'evenement : il se suit uniquement par ce poll.
         pollTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             self?.autoRefresh()
+            self?.refreshRC()
         }
         // L'endpoint d'usage est fortement rate-limite : on l'interroge avec parcimonie.
         usageTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
@@ -95,6 +101,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 self.rebuildMenu()
             }
+        }
+    }
+
+    private func refreshRC() {
+        if rcBusy { return }
+        workQueue.async { [weak self] in
+            let fetched = RemoteControl.state()
+            DispatchQueue.main.async {
+                guard let self, !self.rcBusy, fetched != self.rc else { return }
+                self.rc = fetched
+                self.updateButton()
+                if self.menuOpen {
+                    self.rcSwitch?.state = fetched.serverRunning ? .on : .off
+                } else {
+                    self.rebuildMenu()
+                }
+            }
+        }
+    }
+
+    private func toggleRC(on: Bool) {
+        rcBusy = true
+        rcSwitch?.isEnabled = false
+        let rcQueue = DispatchQueue(label: "com.julienchateau.hyperclaude.rc")
+        rcQueue.async { [weak self] in
+            let failure = on ? RemoteControl.start() : RemoteControl.stop()
+            let fetched = RemoteControl.state()
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.rcBusy = false
+                self.rc = fetched
+                self.rcSwitch?.isEnabled = true
+                self.rcSwitch?.state = fetched.serverRunning ? .on : .off
+                self.updateButton()
+                if let failure { self.alertRC(failure) }
+            }
+        }
+    }
+
+    private func alertRC(_ failure: RemoteControl.Failure) {
+        menu.cancelTracking()
+        let alert = NSAlert()
+        switch failure {
+        case .sudo:
+            alert.messageText = "/RC : sudo refusé sans mot de passe"
+            alert.informativeText = "La règle /etc/sudoers.d/claude-rc-pmset est absente ou invalide. "
+                + "Elle doit autoriser /usr/bin/pmset -a disablesleep 0 et 1 en NOPASSWD."
+        case .start:
+            alert.messageText = "/RC : lancement impossible"
+            alert.informativeText = "La session tmux \(RemoteControl.session) n'a pas démarré dans "
+                + "\(Self.shorten(RemoteControl.directory)). Vérifier que tmux et claude sont dans le PATH de login."
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
+
+    @objc private func chooseRCDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.directoryURL = URL(fileURLWithPath: RemoteControl.directory)
+        panel.prompt = "Choisir"
+        NSApp.activate(ignoringOtherApps: true)
+        if panel.runModal() == .OK, let url = panel.url {
+            RemoteControl.directory = url.path
+            rebuildMenu()
         }
     }
 
@@ -169,8 +241,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.removeAllItems()
         let waiting = sessions.filter { $0.status == "waiting" }.count
 
-        let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        header.isEnabled = false
         let head = NSMutableAttributedString()
         if let logo = Self.headerLogo {
             let att = NSTextAttachment()
@@ -183,7 +253,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .font: NSFont.menuFont(ofSize: 13),
             .foregroundColor: NSColor.secondaryLabelColor,
         ]))
-        header.attributedTitle = head
+        let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        let headerView = HeaderView(title: head, rcOn: rc.serverRunning, rcEnabled: !rcBusy) { [weak self] on in
+            self?.toggleRC(on: on)
+        }
+        rcSwitch = headerView.toggle
+        header.view = headerView
         menu.addItem(header)
         menu.addItem(.separator())
 
@@ -235,15 +310,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.refreshUsage()
         }
         menu.addItem(refresh)
+        let rcDir = NSMenuItem(title: "Dossier /RC : \(Self.shorten(RemoteControl.directory))…",
+                               action: #selector(chooseRCDirectory), keyEquivalent: "")
+        rcDir.target = self
+        menu.addItem(rcDir)
         let quit = NSMenuItem(title: "Quitter HyperClaude", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
 
-        // Cale la vue custom sur la largeur reelle du menu (incluant "Quitter" + ⌘Q),
-        // pour que le surlignage s'etende exactement comme les lignes natives.
+        // Cale les vues custom sur la largeur reelle du menu (incluant "Quitter" + ⌘Q),
+        // pour que surlignage, jauges et switch s'etendent comme les lignes natives.
         let fullWidth = menu.size.width
         if fullWidth > 1 {
-            refresh.view?.setFrameSize(NSSize(width: fullWidth, height: 22))
+            for view in menu.items.compactMap(\.view) {
+                view.setFrameSize(NSSize(width: fullWidth, height: view.frame.height))
+            }
         }
     }
 
@@ -396,6 +477,7 @@ extension AppDelegate: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         menuOpen = true
         refreshSessions()   // donnees fraiches a l'ouverture (local, peu couteux)
+        refreshRC()
     }
     func menuDidClose(_ menu: NSMenu) {
         menuOpen = false
@@ -454,5 +536,51 @@ final class MenuActionView: NSView {
         onClick()
         // Volontairement : pas de cancelTracking -> le menu reste ouvert.
         needsDisplay = true
+    }
+}
+
+// MARK: - En-tete du menu avec le switch /RC
+
+/// En-tete : logo + compteurs a gauche, switch "/RC" a droite. Le switch agit sans fermer le menu.
+final class HeaderView: NSView {
+    let toggle = NSSwitch()
+    private let titleField: NSTextField
+    private let rcLabel = NSTextField(labelWithString: "/RC")
+    private let onToggle: (Bool) -> Void
+
+    init(title: NSAttributedString, rcOn: Bool, rcEnabled: Bool, onToggle: @escaping (Bool) -> Void) {
+        titleField = NSTextField(labelWithAttributedString: title)
+        self.onToggle = onToggle
+        let width = title.size().width + 110
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 26))
+        autoresizingMask = [.width]
+
+        rcLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        rcLabel.textColor = .secondaryLabelColor
+        toggle.controlSize = .mini
+        toggle.state = rcOn ? .on : .off
+        toggle.isEnabled = rcEnabled
+        toggle.target = self
+        toggle.action = #selector(switched)
+        [titleField, rcLabel, toggle].forEach(addSubview)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) non supporte") }
+
+    override func layout() {
+        super.layout()
+        titleField.sizeToFit()
+        rcLabel.sizeToFit()
+        toggle.sizeToFit()
+        let midY = bounds.midY
+        titleField.setFrameOrigin(NSPoint(x: 18, y: midY - titleField.frame.height / 2))
+        toggle.setFrameOrigin(NSPoint(x: bounds.width - 14 - toggle.frame.width,
+                                      y: midY - toggle.frame.height / 2))
+        rcLabel.setFrameOrigin(NSPoint(x: toggle.frame.minX - 6 - rcLabel.frame.width,
+                                       y: midY - rcLabel.frame.height / 2))
+    }
+
+    @objc private func switched() {
+        onToggle(toggle.state == .on)
     }
 }

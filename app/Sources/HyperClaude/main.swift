@@ -17,6 +17,8 @@ if CommandLine.arguments.contains("--selftest") {
     } else {
         FileHandle.standardOutput.write(Data("usage: (nil)\n".utf8))
     }
+    let rc = RemoteControl.state()
+    FileHandle.standardOutput.write(Data("rc: server=\(rc.serverRunning) sleepDisabled=\(rc.sleepDisabled) dir=\(RemoteControl.directory)\n".utf8))
     exit(sessions.isEmpty ? 2 : 0)
 }
 
