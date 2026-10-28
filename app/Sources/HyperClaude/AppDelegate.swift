@@ -173,7 +173,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Icone / badge
 
     /// Glyphe monochrome Hyper x Claude (image template : s'inverse selon le theme de la barre).
-    private static let glyph: NSImage = {
+    static let glyph: NSImage = {
         if let url = Bundle.module.url(forResource: "menubar-template", withExtension: "png"),
            let img = NSImage(contentsOf: url) {
             return img
@@ -181,43 +181,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return NSImage(systemSymbolName: "sparkles", accessibilityDescription: "HyperClaude") ?? NSImage()
     }()
 
-    /// Icone de barre de menus. Sans attente : glyphe template (adaptatif natif).
-    /// Avec attente : glyphe teinte selon le theme + pastille rouge dessinee avec compteur.
-    private func statusImage(waiting: Int) -> NSImage {
+    /// Icone de barre de menus. Etat neutre : glyphe template (adaptatif natif).
+    /// Sinon glyphe colore selon le theme : vert si /RC actif, point orange si /RC incoherent
+    /// (serveur sans anti-veille ou l'inverse), pastille rouge prioritaire si une session attend.
+    static func statusImage(waiting: Int, rc: RemoteControl.State, dark: Bool) -> NSImage {
         let h: CGFloat = 18
-        if waiting == 0 {
-            let img = (Self.glyph.copy() as? NSImage) ?? Self.glyph
+        if waiting == 0 && !rc.active && !rc.inconsistent {
+            let img = (glyph.copy() as? NSImage) ?? glyph
             img.size = NSSize(width: h, height: h)
             img.isTemplate = true
             return img
         }
-        let isDark = (statusItem.button?.effectiveAppearance ?? NSApp.effectiveAppearance)
-            .bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        let glyphColor = isDark ? NSColor.white : NSColor.black
+        let glyphColor: NSColor = rc.active
+            ? (dark ? NSColor(srgbRed: 0.30, green: 0.85, blue: 0.45, alpha: 1)
+                    : NSColor(srgbRed: 0.10, green: 0.55, blue: 0.22, alpha: 1))
+            : (dark ? .white : .black)
 
         let size = NSSize(width: h + 4, height: h)
         let img = NSImage(size: size)
         img.lockFocus()
         let gRect = NSRect(x: 0, y: 0, width: h, height: h)
-        Self.glyph.draw(in: gRect)
-        // Recolore le glyphe (noir) vers la couleur adaptee au theme.
+        glyph.draw(in: gRect)
+        // Recolore le glyphe (noir) vers la couleur d'etat.
         glyphColor.set()
         NSGraphicsContext.current?.compositingOperation = .sourceAtop
         NSBezierPath(rect: gRect).fill()
         NSGraphicsContext.current?.compositingOperation = .sourceOver
-        // Pastille d'alerte.
-        let d: CGFloat = 11
-        let badge = NSRect(x: size.width - d, y: size.height - d, width: d, height: d)
-        NSColor.systemRed.setFill()
-        NSBezierPath(ovalIn: badge).fill()
-        let text = "\(min(waiting, 9))" as NSString
-        let attrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: NSColor.white,
-            .font: NSFont.systemFont(ofSize: 8, weight: .bold),
-        ]
-        let ts = text.size(withAttributes: attrs)
-        text.draw(at: NSPoint(x: badge.midX - ts.width / 2, y: badge.midY - ts.height / 2),
-                  withAttributes: attrs)
+        if rc.inconsistent {
+            let d: CGFloat = 6
+            NSColor.systemOrange.setFill()
+            NSBezierPath(ovalIn: NSRect(x: size.width - d, y: 0, width: d, height: d)).fill()
+        }
+        if waiting > 0 {
+            let d: CGFloat = 11
+            let badge = NSRect(x: size.width - d, y: size.height - d, width: d, height: d)
+            NSColor.systemRed.setFill()
+            NSBezierPath(ovalIn: badge).fill()
+            let text = "\(min(waiting, 9))" as NSString
+            let attrs: [NSAttributedString.Key: Any] = [
+                .foregroundColor: NSColor.white,
+                .font: NSFont.systemFont(ofSize: 8, weight: .bold),
+            ]
+            let ts = text.size(withAttributes: attrs)
+            text.draw(at: NSPoint(x: badge.midX - ts.width / 2, y: badge.midY - ts.height / 2),
+                      withAttributes: attrs)
+        }
         img.unlockFocus()
         img.isTemplate = false
         return img
@@ -226,7 +234,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateButton() {
         guard let button = statusItem.button else { return }
         let waiting = sessions.filter { $0.status == "waiting" }.count
-        button.image = statusImage(waiting: waiting)
+        let dark = (button.effectiveAppearance).bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        button.image = Self.statusImage(waiting: waiting, rc: rc, dark: dark)
     }
 
     // MARK: - Menu

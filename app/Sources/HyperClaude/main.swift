@@ -22,6 +22,26 @@ if CommandLine.arguments.contains("--selftest") {
     exit(sessions.isEmpty ? 2 : 0)
 }
 
+// Rendu des icones de barre de menus en PNG (clair/sombre) pour verification visuelle.
+if let i = CommandLine.arguments.firstIndex(of: "--render-icons"), i + 1 < CommandLine.arguments.count {
+    let dir = CommandLine.arguments[i + 1]
+    let cases: [(String, Int, RemoteControl.State)] = [
+        ("neutre", 0, .init()),
+        ("rc-actif", 0, .init(serverRunning: true, sleepDisabled: true)),
+        ("rc-incoherent", 0, .init(serverRunning: true, sleepDisabled: false)),
+        ("attente-rc-actif", 2, .init(serverRunning: true, sleepDisabled: true)),
+    ]
+    for (name, waiting, rc) in cases {
+        for dark in [false, true] {
+            let img = AppDelegate.statusImage(waiting: waiting, rc: rc, dark: dark)
+            guard let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:]) else { continue }
+            try? png.write(to: URL(fileURLWithPath: "\(dir)/\(name)-\(dark ? "sombre" : "clair").png"))
+        }
+    }
+    exit(0)
+}
+
 // App agent (sans icone Dock) : vit uniquement dans la barre de menus.
 let app = NSApplication.shared
 let delegate = AppDelegate()
