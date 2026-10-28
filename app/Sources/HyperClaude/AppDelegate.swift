@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuOpen = false
     private var sessions: [Session] = []
     private var usage: Usage?
+    private var nextReset: String?
     private var rc = RemoteControl.State()
     private var rcBusy = false
     private weak var rcSwitch: NSSwitch?
@@ -25,13 +26,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         "idle":    "au repos",
         "unknown": "etat inconnu",
     ]
-
-    /// Couleur adaptative : `light` en theme clair, `dark` en theme sombre.
-    private static func dyn(_ light: NSColor, _ dark: NSColor) -> NSColor {
-        NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
-        }
-    }
 
     private static func color(for status: String) -> NSColor {
         switch status {
@@ -78,9 +72,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func refreshSessions() {
         workQueue.async { [weak self] in
             let fetched = DataSource.sessions()
+            let reset = DataSource.nextReset()
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.sessions = fetched
+                self.nextReset = reset
                 self.updateButton()
                 self.rebuildMenu()
             }
@@ -294,6 +290,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let usage, usage.available {
             menu.addItem(usageItem("Session", usage.sessionPercent, usage.sessionSeverity))
             menu.addItem(usageItem("Semaine", usage.weeklyPercent, usage.weeklySeverity))
+            if let nextReset {
+                menu.addItem(note("Reset dans \(nextReset)"))
+            }
         } else {
             menu.addItem(disabled("Usage indisponible"))
         }
@@ -343,11 +342,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return item
     }
 
-    private static func pct(_ value: Double?) -> String {
-        guard let value else { return "-" }
-        return "\(Int(value.rounded())) %"
-    }
-
     private static func shorten(_ path: String?) -> String {
         guard let path else { return "-" }
         return path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
@@ -389,39 +383,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return out
     }
 
-    /// Ligne d'usage : libelle + mini barre + pourcentage.
+    /// Ligne d'usage : vue custom dont la barre s'etire sur toute la largeur du menu.
     private func usageItem(_ label: String, _ percent: Double?, _ severity: String?) -> NSMenuItem {
         let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        let slots = 12
-        let value = percent ?? 0
-        let filled = max(0, min(slots, Int((value / 100 * Double(slots)).rounded())))
-        // Gris fonce (texte + piste) et bleu fonce, adaptatifs clair/sombre.
-        let textColor = Self.dyn(NSColor(white: 0.22, alpha: 1), NSColor(white: 0.88, alpha: 1))
-        let trackColor = Self.dyn(NSColor(white: 0.80, alpha: 1), NSColor(white: 0.35, alpha: 1))
-        let darkBlue = Self.dyn(NSColor(srgbRed: 0.11, green: 0.29, blue: 0.63, alpha: 1),
-                                NSColor(srgbRed: 0.42, green: 0.60, blue: 0.95, alpha: 1))
-        let barColor: NSColor = (severity == "critical") ? .systemRed
-            : (severity == "warning") ? .systemOrange : darkBlue
-        let barFont = NSFont.monospacedSystemFont(ofSize: 11, weight: .bold)
+        item.view = GaugeView(label: label, percent: percent, severity: severity)
+        return item
+    }
 
-        let out = NSMutableAttributedString()
-        out.append(NSAttributedString(string: label.padding(toLength: 8, withPad: " ", startingAt: 0), attributes: [
-            .foregroundColor: textColor,
-            .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
-        ]))
-        // Blocs pleins : partie remplie en couleur, piste en gris fonce solide.
-        out.append(NSAttributedString(string: String(repeating: "█", count: filled), attributes: [
-            .foregroundColor: barColor, .font: barFont,
-        ]))
-        out.append(NSAttributedString(string: String(repeating: "█", count: slots - filled), attributes: [
-            .foregroundColor: trackColor, .font: barFont,
-        ]))
-        out.append(NSAttributedString(string: "  " + Self.pct(percent), attributes: [
-            .foregroundColor: textColor,
-            .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold),
-        ]))
-        item.attributedTitle = out
+    /// Petite ligne grise d'information, alignee sur le texte des jauges.
+    private func note(_ text: String) -> NSMenuItem {
+        let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        item.attributedTitle = NSAttributedString(string: text, attributes: [
+            .foregroundColor: NSColor.tertiaryLabelColor,
+            .font: NSFont.systemFont(ofSize: 10),
+        ])
         return item
     }
 
@@ -593,5 +569,65 @@ final class HeaderView: NSView {
 
     @objc private func switched() {
         onToggle(toggle.state == .on)
+    }
+}
+
+// MARK: - Jauge d'usage pleine largeur
+
+/// Libelle a gauche, pourcentage a droite, barre arrondie entre les deux qui suit la largeur du menu.
+final class GaugeView: NSView {
+    private let label: String
+    private let percent: Double?
+    private let severity: String?
+
+    private static func dyn(_ light: NSColor, _ dark: NSColor) -> NSColor {
+        NSColor(name: nil) { $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light }
+    }
+    private static let textColor = dyn(NSColor(white: 0.22, alpha: 1), NSColor(white: 0.88, alpha: 1))
+    private static let trackColor = dyn(NSColor(white: 0.80, alpha: 1), NSColor(white: 0.35, alpha: 1))
+    private static let darkBlue = dyn(NSColor(srgbRed: 0.11, green: 0.29, blue: 0.63, alpha: 1),
+                                      NSColor(srgbRed: 0.42, green: 0.60, blue: 0.95, alpha: 1))
+
+    init(label: String, percent: Double?, severity: String?) {
+        self.label = label
+        self.percent = percent
+        self.severity = severity
+        super.init(frame: NSRect(x: 0, y: 0, width: 240, height: 20))
+        autoresizingMask = [.width]
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) non supporte") }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        let labelAttrs: [NSAttributedString.Key: Any] = [.foregroundColor: Self.textColor, .font: font]
+        let pctAttrs: [NSAttributedString.Key: Any] = [
+            .foregroundColor: Self.textColor,
+            .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold),
+        ]
+        let labelText = label as NSString
+        let pctText = (percent.map { "\(Int($0.rounded())) %" } ?? "-") as NSString
+        // Largeurs fixes (libelle le plus long, "100 %") : les deux barres restent alignees.
+        let labelWidth = ("Semaine" as NSString).size(withAttributes: labelAttrs).width
+        let pctWidth = ("100 %" as NSString).size(withAttributes: pctAttrs).width
+        let midY = bounds.midY
+        let labelSize = labelText.size(withAttributes: labelAttrs)
+        labelText.draw(at: NSPoint(x: 18, y: midY - labelSize.height / 2), withAttributes: labelAttrs)
+        let pctSize = pctText.size(withAttributes: pctAttrs)
+        pctText.draw(at: NSPoint(x: bounds.width - 14 - pctSize.width, y: midY - pctSize.height / 2),
+                     withAttributes: pctAttrs)
+
+        let barX = 18 + labelWidth + 10
+        let barWidth = max(0, bounds.width - 14 - pctWidth - 10 - barX)
+        let track = NSRect(x: barX, y: midY - 3, width: barWidth, height: 6)
+        Self.trackColor.setFill()
+        NSBezierPath(roundedRect: track, xRadius: 3, yRadius: 3).fill()
+        let ratio = max(0, min(1, (percent ?? 0) / 100))
+        guard ratio > 0 else { return }
+        let barColor: NSColor = (severity == "critical") ? .systemRed
+            : (severity == "warning") ? .systemOrange : Self.darkBlue
+        barColor.setFill()
+        NSBezierPath(roundedRect: NSRect(x: track.minX, y: track.minY, width: max(6, track.width * ratio), height: 6),
+                     xRadius: 3, yRadius: 3).fill()
     }
 }

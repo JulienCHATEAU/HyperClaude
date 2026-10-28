@@ -57,6 +57,14 @@ enum DataSource {
         return (try? decoder().decode([Session].self, from: data)) ?? []
     }
 
+    /// Prochain reset de quota, au texte pres de la status line (ex. "4h47").
+    static func nextReset() -> String? {
+        let code = "from hyperclaude.claude_hooks import next_reset; print(next_reset() or '')"
+        guard let data = run(["-c", code]) else { return nil }
+        let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
+    }
+
     /// L'usage peut etre indisponible (sortie code 1) mais le JSON est toujours emis.
     static func usage() -> Usage? {
         guard let data = run(["-m", "hyperclaude.usage"]) else { return nil }
