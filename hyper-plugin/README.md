@@ -20,7 +20,7 @@ ambiguite (une session = une fenetre dans ce setup).
 ```bash
 # lier le plugin dans les plugins locaux de Hyper
 mkdir -p ~/.hyper_plugins/local
-ln -s ~/Documents/Mysty/HyperClaude/hyper-plugin ~/.hyper_plugins/local/hyperclaude
+ln -s ~/Documents/Perso/Projets/HyperClaude/hyper-plugin ~/.hyper_plugins/local/hyperclaude
 ```
 
 Puis dans `~/.hyper.js`, ajouter `'hyperclaude'` a `localPlugins` :

@@ -74,8 +74,8 @@ SwiftBar doit etre installe, puis (etapes manuelles - le bit executable et le li
 poser soi-meme) :
 
 ```bash
-chmod +x ~/Documents/Mysty/HyperClaude/swiftbar/claude_sessions.3s.py
-ln -s ~/Documents/Mysty/HyperClaude/swiftbar/claude_sessions.3s.py \
+chmod +x ~/Documents/Perso/Projets/HyperClaude/swiftbar/claude_sessions.3s.py
+ln -s ~/Documents/Perso/Projets/HyperClaude/swiftbar/claude_sessions.3s.py \
       "<dossier de plugins SwiftBar>/claude_sessions.3s.py"
 ```
 
@@ -83,7 +83,7 @@ Le script se resout lui-meme vers ce depot (via `__file__`), donc le lien symbol
 inutile de copier tout le paquet. Verifier le rendu hors SwiftBar :
 
 ```bash
-python3 ~/Documents/Mysty/HyperClaude/swiftbar/claude_sessions.3s.py
+python3 ~/Documents/Perso/Projets/HyperClaude/swiftbar/claude_sessions.3s.py
 ```
 
 ## Usage / quota (footer, `hyperclaude/usage.py`) - source derisquee
