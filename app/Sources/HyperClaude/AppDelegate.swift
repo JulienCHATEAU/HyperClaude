@@ -157,7 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Glyphe monochrome Hyper x Claude (image template : s'inverse selon le theme de la barre).
     static let glyph: NSImage = {
-        if let url = Bundle.module.url(forResource: "menubar-template", withExtension: "png"),
+        if let url = Bundle.appResources.url(forResource: "menubar-template", withExtension: "png"),
            let img = NSImage(contentsOf: url) {
             return img
         }
@@ -225,7 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Logo couleur pour le header du menu (inline).
     private static let headerLogo: NSImage? = {
-        guard let url = Bundle.module.url(forResource: "menubar-icon", withExtension: "png") else { return nil }
+        guard let url = Bundle.appResources.url(forResource: "menubar-icon", withExtension: "png") else { return nil }
         return NSImage(contentsOf: url)
     }()
 
