@@ -563,13 +563,25 @@ final class GaugeView: NSView {
     private let percent: Double?
     private let severity: String?
 
-    private static func dyn(_ light: NSColor, _ dark: NSColor) -> NSColor {
-        NSColor(name: nil) { $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light }
+    private struct Palette {
+        let text: NSColor
+        let track: NSColor
+        let darkBlue: NSColor
     }
-    private static let textColor = dyn(NSColor(white: 0.22, alpha: 1), NSColor(white: 0.88, alpha: 1))
-    private static let trackColor = dyn(NSColor(white: 0.80, alpha: 1), NSColor(white: 0.35, alpha: 1))
-    private static let darkBlue = dyn(NSColor(srgbRed: 0.11, green: 0.29, blue: 0.63, alpha: 1),
-                                      NSColor(srgbRed: 0.42, green: 0.60, blue: 0.95, alpha: 1))
+
+    private static let lightPalette = Palette(
+        text: NSColor(white: 0.22, alpha: 1),
+        track: NSColor(white: 0.80, alpha: 1),
+        darkBlue: NSColor(srgbRed: 0.11, green: 0.29, blue: 0.63, alpha: 1))
+    private static let darkPalette = Palette(
+        text: NSColor(white: 0.88, alpha: 1),
+        track: NSColor(white: 0.35, alpha: 1),
+        darkBlue: NSColor(srgbRed: 0.42, green: 0.60, blue: 0.95, alpha: 1))
+
+    // Couleurs figées avant CoreText : copier une NSColor dynamique sans nom peut renvoyer nil (SIGABRT sous macOS 26.6).
+    private var palette: Palette {
+        effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? Self.darkPalette : Self.lightPalette
+    }
 
     init(label: String, percent: Double?, severity: String?) {
         self.label = label
@@ -582,10 +594,11 @@ final class GaugeView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) non supporte") }
 
     override func draw(_ dirtyRect: NSRect) {
+        let colors = palette
         let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-        let labelAttrs: [NSAttributedString.Key: Any] = [.foregroundColor: Self.textColor, .font: font]
+        let labelAttrs: [NSAttributedString.Key: Any] = [.foregroundColor: colors.text, .font: font]
         let pctAttrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: Self.textColor,
+            .foregroundColor: colors.text,
             .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold),
         ]
         let labelText = label as NSString
@@ -603,12 +616,12 @@ final class GaugeView: NSView {
         let barX = 18 + labelWidth + 10
         let barWidth = max(0, bounds.width - 14 - pctWidth - 10 - barX)
         let track = NSRect(x: barX, y: midY - 3, width: barWidth, height: 6)
-        Self.trackColor.setFill()
+        colors.track.setFill()
         NSBezierPath(roundedRect: track, xRadius: 3, yRadius: 3).fill()
         let ratio = max(0, min(1, (percent ?? 0) / 100))
         guard ratio > 0 else { return }
         let barColor: NSColor = (severity == "critical") ? .systemRed
-            : (severity == "warning") ? .systemOrange : Self.darkBlue
+            : (severity == "warning") ? .systemOrange : colors.darkBlue
         barColor.setFill()
         NSBezierPath(roundedRect: NSRect(x: track.minX, y: track.minY, width: max(6, track.width * ratio), height: 6),
                      xRadius: 3, yRadius: 3).fill()
