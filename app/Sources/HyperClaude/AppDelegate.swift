@@ -578,6 +578,9 @@ final class GaugeView: NSView {
         track: NSColor(white: 0.35, alpha: 1),
         darkBlue: NSColor(srgbRed: 0.42, green: 0.60, blue: 0.95, alpha: 1))
 
+    private static let labelFont = NSFont.systemFont(ofSize: 11, weight: .regular)
+    private static let pctFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
+
     // Couleurs figées avant CoreText : copier une NSColor dynamique sans nom peut renvoyer nil (SIGABRT sous macOS 26.6).
     private var palette: Palette {
         effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? Self.darkPalette : Self.lightPalette
@@ -595,12 +598,9 @@ final class GaugeView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let colors = palette
-        let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-        let labelAttrs: [NSAttributedString.Key: Any] = [.foregroundColor: colors.text, .font: font]
-        let pctAttrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: colors.text,
-            .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold),
-        ]
+        // Pas de monospacedSystemFont : CoreText y insère un nil au dessin (SIGABRT sous macOS 26.6, après le correctif couleurs).
+        let labelAttrs: [NSAttributedString.Key: Any] = [.foregroundColor: colors.text, .font: Self.labelFont]
+        let pctAttrs: [NSAttributedString.Key: Any] = [.foregroundColor: colors.text, .font: Self.pctFont]
         let labelText = label as NSString
         let pctText = (percent.map { "\(Int($0.rounded())) %" } ?? "-") as NSString
         // Largeurs fixes (libelle le plus long, "100 %") : les deux barres restent alignees.
